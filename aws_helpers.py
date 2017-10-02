@@ -15,6 +15,6 @@ def get_dynamodb_settings(id, table_name='fwaligorski-watchdog-table'):
     # TODO check if id is correct
     response = table.get_item(
         Key={'id': str(id)}
-        )
+    )
     items = response['Item']
     return items
