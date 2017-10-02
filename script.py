@@ -8,6 +8,12 @@ import argparse
 import logging
 from aws_helpers import sns_send, get_dynamodb_settings
 
+class ValidationError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Watchdog')
@@ -18,13 +24,14 @@ def parse_args():
 def log(text):
     sns_send(text)
     logging.error(text)
+    print(text)
 
 
-async def manage_config_changes(settings, db_id, time_to_wait=900):
+async def manage_config_changes(settings, db_id, time_to_wait=15):
     while True:
         await asyncio.sleep(time_to_wait)
         print('checking new settings')
-        new_settings = get_dynamodb_settings(db_id)
+        new_settings = get_config(db_id)
         if (settings != new_settings):
             return new_settings
     
@@ -82,10 +89,50 @@ def cancel_all_tasks():
         task.cancel()
 
 
+def get_config(db_id):
+    try:
+        settings = get_dynamodb_settings(db_id)
+        validate_config(settings)
+    except ValidationError as e:
+        log("Config validation error: {}".format(e.value))
+        sys.exit()
+    except:
+        log("Incorrect ID value")
+        sys.exit()
+    return settings
+
+
+def validate_config(settings):
+    fields = ['ListOfServices', 'NumOfSecCheck', 'NumOfSecWait', 'NumOfAttempts']
+    for f in fields:
+        if not f in settings:
+            raise ValidationError('Field {} is not present'.format(f))
+    length = len(settings['ListOfServices'])
+    if length == 0:
+        raise ValidationError('No services to watch on list')
+    if length > 100:
+        raise ValidationError('Too many services to watch on list')
+    if len(set(settings['ListOfServices'])) != length: 
+        raise ValidationError('List contains duplicates')
+    fields.pop(0) # remove ListOfServices from further validation
+    for f in fields:
+        try:
+            int(settings[f])
+        except ValueError:
+            raise ValidationError('Field {} is not correct integer'.format(f))
+        except:
+            raise ValidationError('Unknown problem with field {}'.format(f))
+    for f in fields:
+        if settings[f] < 0:
+            raise ValidationError('Field {} out of range'.format(f))
+
+
+
 def main():
     logging.basicConfig(filename='nordcloud.log', level=logging.WARNING, format='%(asctime)s %(message)s')
     args = parse_args()
-    settings = get_dynamodb_settings(args.id)
+    settings = get_config(args.id)
+
     try:
         loop = asyncio.get_event_loop()
         while True:
