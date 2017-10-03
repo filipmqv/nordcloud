@@ -124,8 +124,10 @@ def validate_config(settings):
             raise ValidationError('Unknown problem with field {}'.format(f))
     for f in fields:
         if settings[f] < 0:
-            raise ValidationError('Field {} out of range'.format(f))
-
+            raise ValidationError('Field {} should be greater than zero (x>0)'.format(f))
+        int_setting_max = 99999
+        if settings[f] > int_setting_max:
+            raise ValidationError('Field {} should be lower than int_setting_max = {}'.format(f, int_setting_max))
 
 
 def main():
@@ -143,7 +145,7 @@ def main():
 
             # first and only completed task can be 'manage_config_changes' task which ends when config changed
             done, _ = loop.run_until_complete(asyncio.wait(futures, return_when=FIRST_COMPLETED))
-            settings = done.pop().result()
+            settings = done.pop().result() # new settings
             cancel_all_tasks()
     except KeyboardInterrupt:
         # ctrl-c was pushed; cancel all tasks
@@ -156,13 +158,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# todo
-
-# check if id of dynamodb is correct
-
-# This should be a daemonized script​ which is able to run in the background even when a
-# user is not logged on (running as a Service).
-
-# 2. Upon execution - the script should check for configuration and perform error handling
-# (demonstrate creativeness).
